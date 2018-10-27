@@ -21,7 +21,7 @@
         "properties": {
           "pomeloPeel.rootDir": {
             "type": "string",
-            "default": "./",
+            "default": "",
             "description": "RootDirectory"
           }
         }
@@ -31,17 +31,17 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "pomelo-peel",
+          "id": "pomeloPeel",
           "title": "柚子皮笔记本",
           "icon": "images/notebook_30x30.svg"
         }
       ]
     },
     "views": {
-      "pomelo-peel": [
+      "pomeloPeel": [
         {
-          "id": "pomelo-peelLocal",
-          "name": "我的笔记"
+          "id": "pomeloPeelDefault",
+          "name": "本地文档"
         }
       ]
     }

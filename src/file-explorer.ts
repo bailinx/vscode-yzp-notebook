@@ -2,14 +2,14 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fileHandler from './utils/file-handler';
-import * as fileStat from './utils/file-stat';
+import { FileStat } from './utils/file-stat';
 
 interface Entry {
-  uri: vscode.Uri,
-  type: vscode.FileType
+  uri: vscode.Uri;
+  type: vscode.FileType;
 }
 
-export class FileSystemProvider implements vscode.TreeDataProvider<Entry>, vscode.FileSystemProvider {
+class FileSystemProvider implements vscode.TreeDataProvider<Entry>, vscode.FileSystemProvider {
 
   private _onDidChangeFile: vscode.EventEmitter<vscode.FileChangeEvent[]>;
 
@@ -41,7 +41,7 @@ export class FileSystemProvider implements vscode.TreeDataProvider<Entry>, vscod
   }
 
   async _stat(path: string): Promise<vscode.FileStat> {
-    return new fileStat.FileStat(await fileHandler.stat(path));
+    return new FileStat(await fileHandler.stat(path));
   }
 
   readDirectory(uri: vscode.Uri): [string, vscode.FileType][] | Thenable<[string, vscode.FileType][]> {
@@ -128,16 +128,31 @@ export class FileSystemProvider implements vscode.TreeDataProvider<Entry>, vscod
       return children.map(([name, type]) => ({ uri: vscode.Uri.file(path.join(element.uri.fsPath, name)), type }));
     }
 
-    const workspaceFolder = vscode.workspace.workspaceFolders.filter(folder => folder.uri.scheme === 'file')[0];
+    // read workspace dir
+    const workspaceFolder = vscode.workspace.getConfiguration().get('pomeloPeel.rootDir');
+    // const workspaceFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.filter(folder => folder.uri.scheme === 'file')[0];
+
     if (workspaceFolder) {
-      const children = await this.readDirectory(workspaceFolder.uri);
+      const workspaceUri: vscode.Uri = vscode.Uri.parse(workspaceFolder.toString());
+      const children = await this.readDirectory(workspaceUri);
+
       children.sort((a, b) => {
         if (a[1] === b[1]) {
           return a[0].localeCompare(b[0]);
         }
         return a[1] === vscode.FileType.Directory ? -1 : 1;
-      })
-      return children.map(([name, type]) => ({ uri: vscode.Uri.file(path.join(workspaceFolder.uri.fsPath, name)), type }));
+      });
+      return children.map(([name, type]) => ({ uri: vscode.Uri.file(path.join(workspaceUri.fsPath, name)), type }));
+    } else {
+      const openDialogOptions: vscode.OpenDialogOptions = {
+        canSelectFiles: false,
+        canSelectFolders: true,
+      };
+      vscode.window.showOpenDialog(openDialogOptions).then((uris) => {
+        if (uris && uris.length) {
+          vscode.workspace.getConfiguration().update('pomeloPeel.rootDir', uris[0].path);
+        }
+      });
     }
 
     return [];
@@ -146,7 +161,7 @@ export class FileSystemProvider implements vscode.TreeDataProvider<Entry>, vscod
   getTreeItem(element: Entry): vscode.TreeItem {
     const treeItem = new vscode.TreeItem(element.uri, element.type === vscode.FileType.Directory ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
     if (element.type === vscode.FileType.File) {
-      treeItem.command = { command: 'fileExplorer.openFile', title: "Open File", arguments: [element.uri], };
+      treeItem.command = { command: 'pomeloPeel.openFile', title: "Open File", arguments: [element.uri], };
       treeItem.contextValue = 'file';
     }
     return treeItem;
@@ -159,11 +174,17 @@ export class FileExplorer {
 
   constructor(context: vscode.ExtensionContext) {
     const treeDataProvider = new FileSystemProvider();
-    this.fileExplorer = vscode.window.createTreeView('fileExplorer', { treeDataProvider });
-    vscode.commands.registerCommand('fileExplorer.openFile', (resource) => this.openResource(resource));
+    this.fileExplorer = vscode.window.createTreeView('pomeloPeelDefault', { treeDataProvider });
+    vscode.commands.registerCommand('pomeloPeel.openFile', (resource) => this.openResource(resource));
   }
 
   private openResource(resource: vscode.Uri): void {
-    vscode.window.showTextDocument(resource);
+    vscode.commands.executeCommand('workbench.action.closeEditorsInOtherGroups').then(() => {
+      vscode.window.showTextDocument(resource, { preview: false }).then(() => {
+        vscode.commands.executeCommand('markdown.showPreviewToSide').then(() => { }, error => {
+          console.error(error);
+        });
+      });
+    });
   }
 }
